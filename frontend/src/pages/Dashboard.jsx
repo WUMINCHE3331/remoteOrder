@@ -43,22 +43,7 @@ export default function Dashboard() {
 
   const handleConfirm = () => {
     setIsLocked(true);
-    // if (socketRef.current) {
-    //   socketRef.current.close();
-    // }
-
-    // try {
-    //   const fullUrl = `ws://${wsUrl}`; // 這裡自動加 ws://
-    //   const socket = new WebSocket(fullUrl);
-    //   socketRef.current = socket;
-
-    //   socket.onopen = () => setConnectionStatus("已連線");
-    //   socket.onclose = () => setConnectionStatus("已中斷");
-    //   socket.onerror = () => setConnectionStatus("連線錯誤");
-    // } catch (e) {
-    //   console.error("WebSocket 建立失敗：", e);
-    //   setConnectionStatus("建立連線失敗");
-    // }
+ 
   };
 
   const handleEdit = () => {
@@ -124,24 +109,26 @@ export default function Dashboard() {
             isPaid: rawOrder.isPaid ?? false, // 讀取 isPaid 狀態
           };
           setOrders((prevOrders) => {
-            const index = prevOrders.findIndex(
-              (o) => o.no === formattedOrder.no
-            );
-            if (index !== -1) {
-              const newOrders = [...prevOrders];
-              const previousOrder = newOrders[index];
+  const index = prevOrders.findIndex((o) => o.no === formattedOrder.no);
+  if (index !== -1) {
+    const newOrders = [...prevOrders];
+    const previousOrder = newOrders[index];
 
-              newOrders[index] = {
-                ...formattedOrder,
-                createdAt: previousOrder.createdAt, // 保留原始 createdAt
-                waitTime: previousOrder.waitTime, // 可留或重算
-              };
-              return newOrders;
-            } else {
-              // 新訂單才用 now 作為 createdAt
-              return [...prevOrders, { ...formattedOrder, createdAt: now }];
-            }
-          });
+    const shouldResetTime = (formattedOrder.items || []).length === 0;
+
+    newOrders[index] = {
+      ...formattedOrder,
+       createdAt: shouldResetTime ? 0 : previousOrder.createdAt,
+      waitTime: shouldResetTime ? 0 : previousOrder.waitTime,
+    };
+
+    return newOrders;
+  } else {
+    // 新訂單才用 now 作為 createdAt
+    return [...prevOrders, { ...formattedOrder, createdAt: now }];
+  }
+});
+
         }
       } catch (e) {
         console.error("解析 WebSocket 訊息錯誤:", e);
@@ -218,7 +205,7 @@ export default function Dashboard() {
   const handleRestoreOne = useCallback(() => {
     setHiddenStack((prev) => prev.slice(0, prev.length - 1));
   }, []);
-  const [showSettings, setShowSettings] = useState(false  ); // 控制收折
+  const [showSettings, setShowSettings] = useState(false); // 控制收折
   // 還原所有隱藏訂單
   const handleRestoreAll = useCallback(() => {
     setHiddenStack([]);
@@ -319,14 +306,14 @@ export default function Dashboard() {
         >
           <strong>設定與搜尋</strong>
           <span
-                style={{
-                  fontWeight: "bold",
-                  color: connectionStatus === "已連線" ? "green" : "red",
-                  marginLeft: 8,
-                }}
-              >
-                WebSocket 狀態：{connectionStatus}
-              </span>
+            style={{
+              fontWeight: "bold",
+              color: connectionStatus === "已連線" ? "green" : "red",
+              marginLeft: 8,
+            }}
+          >
+            WebSocket 狀態：{connectionStatus}
+          </span>
           <span>{showSettings ? "▲ 收起" : "▼ 展開"}</span>
         </div>
 
@@ -426,9 +413,9 @@ export default function Dashboard() {
               沒有可顯示的訂單
             </div>
           ) : (
-            pagedOrders.map((order) => {
-              // ❗ 新增這行：若沒有 items 就跳過渲染
-              if (!order.items || order.items.length === 0) return null;
+              pagedOrders.map((order) => {
+                // ❗ 新增這行：若沒有 items 就跳過渲染
+                if (!order.items || order.items.length === 0) return null;
               const isFadingOut = fadingOutIds.has(order.id);
               const isLongWait = order.waitTime > LONG_WAIT_THRESHOLD;
               const classNames = ["card"];
