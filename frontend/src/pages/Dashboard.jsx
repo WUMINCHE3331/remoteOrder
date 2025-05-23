@@ -8,6 +8,27 @@ import React, {
 
 const ITEMS_PER_PAGE = 6;
 const LONG_WAIT_THRESHOLD = 5;
+function isValidWsUrl(url) {
+  try {
+    // 強制補上 ws:// 才驗證
+    const fullUrl =
+      url.startsWith("ws://") || url.startsWith("wss://") ? url : `ws://${url}`;
+    const parsed = new URL(fullUrl);
+
+    // 簡單檢查協議和 port
+    if (!["ws:", "wss:"].includes(parsed.protocol)) return false;
+
+    // port 是空字串則為預設port，有填則要在範圍內
+    if (parsed.port) {
+      const portNum = Number(parsed.port);
+      if (isNaN(portNum) || portNum < 0 || portNum > 65535) return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export default function Dashboard() {
   const [orders, setOrders] = useState([]);
@@ -19,24 +40,25 @@ export default function Dashboard() {
   const [connectionStatus, setConnectionStatus] = useState("尚未連線");
   const [isLocked, setIsLocked] = useState(true);
   const socketRef = useRef(null);
+
   const handleConfirm = () => {
     setIsLocked(true);
-    if (socketRef.current) {
-      socketRef.current.close();
-    }
+    // if (socketRef.current) {
+    //   socketRef.current.close();
+    // }
 
-    try {
-      const fullUrl = `ws://${wsUrl}`; // 這裡自動加 ws://
-      const socket = new WebSocket(fullUrl);
-      socketRef.current = socket;
+    // try {
+    //   const fullUrl = `ws://${wsUrl}`; // 這裡自動加 ws://
+    //   const socket = new WebSocket(fullUrl);
+    //   socketRef.current = socket;
 
-      socket.onopen = () => setConnectionStatus("已連線");
-      socket.onclose = () => setConnectionStatus("已中斷");
-      socket.onerror = () => setConnectionStatus("連線錯誤");
-    } catch (e) {
-      console.error("WebSocket 建立失敗：", e);
-      setConnectionStatus("建立連線失敗");
-    }
+    //   socket.onopen = () => setConnectionStatus("已連線");
+    //   socket.onclose = () => setConnectionStatus("已中斷");
+    //   socket.onerror = () => setConnectionStatus("連線錯誤");
+    // } catch (e) {
+    //   console.error("WebSocket 建立失敗：", e);
+    //   setConnectionStatus("建立連線失敗");
+    // }
   };
 
   const handleEdit = () => {
@@ -62,8 +84,15 @@ export default function Dashboard() {
   // WebSocket 連線
   useEffect(() => {
     // const socket = new WebSocket("ws://192.168.0.47:8080"); // 確認 WebSocket URL 正確
-    const fullUrl = `ws://${wsUrl}`; // 這裡自動加 ws://
+    if (!isLocked) return;
+    if (!isValidWsUrl(wsUrl)) {
+      console.error("WebSocket URL 不合法，無法建立連線");
+      setConnectionStatus("WebSocket URL 不合法");
+      return;
+    }
+    const fullUrl = `ws://${wsUrl}`;
     const socket = new WebSocket(fullUrl);
+    socketRef.current = socket;
     socket.onopen = () => {
       console.log("WebSocket connected");
       setConnectionStatus("已連線");
@@ -76,7 +105,7 @@ export default function Dashboard() {
 
     socket.onmessage = (event) => {
       console.log("收到 WebSocket 訊息：", event.data);
-
+      const now = Date.now();
       try {
         const msg = JSON.parse(event.data);
         console.log("解析後的訊息物件：", msg);
@@ -86,12 +115,12 @@ export default function Dashboard() {
 
           // 建立訂單物件
           const formattedOrder = {
-            id: `ws_order_${rawOrder.orderNumber}_${Date.now()}`,
+            id: `ws_order_${rawOrder.orderNumber}_${now}`,
             no: rawOrder.orderNumber || "未知單號",
             ticketNumber: rawOrder.ticketNumber ?? -1,
             waitTime: 0, // 先預設
             items: rawOrder.items || [],
-            createdAt: Date.now(), // 不使用 rawOrder.createdAt，直接由前端產生
+            createdAt: now,
             isPaid: rawOrder.isPaid ?? false, // 讀取 isPaid 狀態
           };
           setOrders((prevOrders) => {
@@ -99,18 +128,18 @@ export default function Dashboard() {
               (o) => o.no === formattedOrder.no
             );
             if (index !== -1) {
-              // 更新已存在的訂單，但不改變排序（放原位置）
               const newOrders = [...prevOrders];
-              // 保留之前的 createdAt，避免重置計時
-              formattedOrder.createdAt = newOrders[index].createdAt;
+              const previousOrder = newOrders[index];
+
               newOrders[index] = {
                 ...formattedOrder,
-                waitTime: newOrders[index].waitTime,
+                createdAt: previousOrder.createdAt, // 保留原始 createdAt
+                waitTime: previousOrder.waitTime, // 可留或重算
               };
               return newOrders;
             } else {
-              // 新增訂單，放在最後面
-              return [...prevOrders, formattedOrder];
+              // 新訂單才用 now 作為 createdAt
+              return [...prevOrders, { ...formattedOrder, createdAt: now }];
             }
           });
         }
@@ -127,7 +156,7 @@ export default function Dashboard() {
     return () => {
       socket.close();
     };
-  }, []);
+  }, [isLocked, wsUrl]);
 
   // 過濾隱藏訂單
   const notHiddenOrders = useMemo(() => {
@@ -189,7 +218,7 @@ export default function Dashboard() {
   const handleRestoreOne = useCallback(() => {
     setHiddenStack((prev) => prev.slice(0, prev.length - 1));
   }, []);
-
+  const [showSettings, setShowSettings] = useState(false  ); // 控制收折
   // 還原所有隱藏訂單
   const handleRestoreAll = useCallback(() => {
     setHiddenStack([]);
@@ -213,7 +242,7 @@ export default function Dashboard() {
 }
           .grid-container {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(3, 1fr);
             grid-template-rows: repeat(2, 1fr);
             gap: 10px;
             padding: 10px;
@@ -252,6 +281,13 @@ export default function Dashboard() {
             transform: translateY(-100%);
             pointer-events: none;
           }
+            .item-list-scroll {
+  margin: 0;
+  padding-left: 0;
+  flex-grow: 1;
+  max-height: 280px;
+  overflow-y: auto;
+}
 
 
         `}</style>
@@ -267,73 +303,114 @@ export default function Dashboard() {
       >
         {/* WebSocket 設定與狀態顯示 */}
 
+        {/* 收折控制列 */}
+
         <div
           style={{
-            padding: 10,
+            padding: "6px 10px",
+            background: "#eee",
+            borderBottom: "1px solid #ccc",
+            cursor: "pointer",
             display: "flex",
-            justifyContent: "start",
+            justifyContent: "space-between",
             alignItems: "center",
           }}
+          onClick={() => setShowSettings((prev) => !prev)}
         >
-          <div style={{ display: "flex", alignItems: "center" }}>
-            <label style={{ marginRight: 6 }}>WebSocket URL：</label>
-            <input
-              type="text"
-              value={wsUrl}
-              disabled={isLocked}
-              onChange={(e) => setWsUrl(e.target.value)}
-              style={{ width: 300, marginRight: 8 }}
-            />
-            {isLocked ? (
-              <button onClick={handleEdit} title="編輯 URL">
-                ✏️
-              </button>
-            ) : (
-              <button onClick={handleConfirm} title="確認連線">
-                ✅
-              </button>
-            )}
-          </div>
+          <strong>設定與搜尋</strong>
+          <span
+                style={{
+                  fontWeight: "bold",
+                  color: connectionStatus === "已連線" ? "green" : "red",
+                  marginLeft: 8,
+                }}
+              >
+                WebSocket 狀態：{connectionStatus}
+              </span>
+          <span>{showSettings ? "▲ 收起" : "▼ 展開"}</span>
+        </div>
 
+        {/* 設定區塊 */}
+        {showSettings && (
           <div
             style={{
-              fontWeight: "bold",
-              color: connectionStatus === "已連線" ? "green" : "red",
+              padding: 10,
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              borderBottom: "1px solid #ddd",
             }}
           >
-            WebSocket 狀態：{connectionStatus}
+            {/* WebSocket 設定與狀態 */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <label>WebSocket URL：</label>
+              <input
+                type="text"
+                value={wsUrl}
+                disabled={isLocked}
+                onChange={(e) => setWsUrl(e.target.value)}
+                style={{ width: 240 }}
+              />
+              {isLocked ? (
+                <button onClick={handleEdit} title="編輯 URL">
+                  ✏️
+                </button>
+              ) : (
+                <button onClick={handleConfirm} title="確認連線">
+                  ✅
+                </button>
+              )}
+              <div
+                style={{
+                  fontWeight: "bold",
+                  color: connectionStatus === "已連線" ? "green" : "red",
+                  marginLeft: 8,
+                }}
+              >
+                WebSocket 狀態：{connectionStatus}
+              </div>
+            </div>
+
+            {/* 搜尋與已完成訂單數 */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <input
+                type="text"
+                placeholder="搜尋號碼牌或飲料名稱"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(0);
+                }}
+                style={{
+                  padding: "6px 10px",
+                  fontSize: 15,
+                  borderRadius: 4,
+                  border: "1px solid #ccc",
+                  width: 220,
+                }}
+              />
+              <div style={{ fontWeight: "bold", fontSize: 15 }}>
+                已完成訂單：{hiddenStack.length} 筆
+              </div>
+            </div>
           </div>
-        </div>
-        {/* 搜尋與已完成訂單數 */}
-        <div
-          style={{
-            padding: 10,
-            borderBottom: "1px solid #ddd",
-            display: "flex",
-            alignItems: "center",
-            gap: 20,
-          }}
-        >
-          <input
-            type="text"
-            placeholder="搜尋號碼牌或飲料名稱"
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(0);
-            }}
-            style={{
-              padding: "8px 12px",
-              fontSize: 16,
-              flexGrow: 1,
-              borderRadius: 4,
-              border: "1px solid #ccc",
-            }}
-          />
-          <div style={{ fontWeight: "bold", fontSize: 16 }}>
-            已完成訂單：{hiddenStack.length} 筆
-          </div>
-        </div>
+        )}
 
         <div className="grid-container" style={{ flex: 1 }}>
           {pagedOrders.length === 0 ? (
@@ -365,60 +442,61 @@ export default function Dashboard() {
                   title="雙擊隱藏訂單"
                   className={classNames.join(" ")}
                 >
-                  {/* <div
-  style={{
-    fontWeight: "bold",
-    fontSize: 16,
-    marginBottom: 8,
-    color: "#444",
-  }}
->
-  #{order.no} / {order.ticketNumber}號 / {order.waitTime}分
-</div> */}
-
                   <div
                     style={{
-                      fontWeight: "bold",
-                      fontSize: 16,
-                      marginBottom: 4,
-                      color: "#555",
+                      display: "flex",
+                      gap: "16px",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      marginBottom: 8,
                     }}
                   >
-                    序號：{order.no}
-                  </div>
-                  <div
-                    style={{
-                      fontWeight: "bold",
-                      fontSize: 18,
-                      marginBottom: 6,
-                    }}
-                  >
-                    號碼牌：{order.ticketNumber}
-                  </div>
-                  <div style={{ color: "#666", marginBottom: 8 }}>
-                    等待時間：{order.waitTime} 分鐘
+                    <div
+                      style={{
+                        fontWeight: "bold",
+                        fontSize: 16,
+                        color: "#555",
+                      }}
+                    >
+                      單號: {order.no}
+                    </div>
+                    <div
+                      style={{
+                        fontWeight: "bold",
+                        fontSize: 16,
+                      }}
+                    >
+                      號碼牌：{order.ticketNumber}
+                    </div>
+                    <div style={{ color: "#666" }}>{order.waitTime} 分鐘</div>
+                    <div style={{ fontWeight: "bold", fontSize: 16 }}>
+                      品數：
+                      {order.items.reduce(
+                        (sum, item) => sum + item.quantity,
+                        0
+                      )}
+                    </div>
                   </div>
 
-                  {/* ⬇️ 加這層 scroll 容器 ⬇️ */}
-                  <div className="item-scroll-container">
-                    <ul style={{ margin: 0, paddingLeft: 20 }}>
-                      {order.items.map((item, i) => {
-                        const optionsText = item.options?.length
-                          ? item.options.map((opt) => opt.name).join("、")
-                          : "";
-                        const sugar = item.sugar_level || item.sugar || "";
-                        const ice = item.ice || "";
-                        return (
-                          <li
-                            key={`${item.name}-${i}`}
-                            style={{ fontSize: 14 }}
-                          >
-                            {item.name} x{item.quantity}（{ice} / {sugar}
-                            {optionsText ? ` / ${optionsText}` : ""}）
-                          </li>
-                        );
-                      })}
-                    </ul>
+                  <div className="item-list-scroll">
+                    {order.items.map((item, i) => {
+                      const optionsText = item.options?.length
+                        ? item.options.map((opt) => opt.name).join("、")
+                        : "";
+                      const sugar = item.sugar_level || item.sugar || "";
+                      const ice = item.ice || "";
+                      const eco_cup = item.eco_cup || "";
+                      return (
+                        <div
+                          key={`${item.name}-${i}`}
+                          style={{ fontSize: 14, marginBottom: 4 }}
+                        >
+                          {item.name} x{item.quantity}（ {sugar} / {ice} /{" "}
+                          {eco_cup}
+                          {optionsText ? ` / ${optionsText}` : ""}）
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
