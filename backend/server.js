@@ -12,6 +12,12 @@ wss.on('connection', function connection(ws) {
 
   ws.on('message', function incoming(message) {
     console.log('📦 收到資料:', message.toString());
+    //   const msg = message.toString(); // 👈 確保是字串格式
+    // // ✅ 若收到 ping 就回傳 pong
+    // if (msg === 'ping') {
+    //   ws.send('pong');
+    //   return;
+    // }
 
     // Broadcast 給所有連線者（前台）
     connections.forEach((client) => {
