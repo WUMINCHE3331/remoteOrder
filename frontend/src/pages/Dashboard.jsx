@@ -43,7 +43,6 @@ export default function Dashboard() {
 
   const handleConfirm = () => {
     setIsLocked(true);
- 
   };
 
   const handleEdit = () => {
@@ -109,26 +108,27 @@ export default function Dashboard() {
             isPaid: rawOrder.isPaid ?? false, // 讀取 isPaid 狀態
           };
           setOrders((prevOrders) => {
-  const index = prevOrders.findIndex((o) => o.no === formattedOrder.no);
-  if (index !== -1) {
-    const newOrders = [...prevOrders];
-    const previousOrder = newOrders[index];
+            const index = prevOrders.findIndex(
+              (o) => o.no === formattedOrder.no
+            );
+            if (index !== -1) {
+              const newOrders = [...prevOrders];
+              const previousOrder = newOrders[index];
 
-    const shouldResetTime = (formattedOrder.items || []).length === 0;
+              const shouldResetTime = (formattedOrder.items || []).length === 0;
 
-    newOrders[index] = {
-      ...formattedOrder,
-       createdAt: shouldResetTime ? 0 : previousOrder.createdAt,
-      waitTime: shouldResetTime ? 0 : previousOrder.waitTime,
-    };
+              newOrders[index] = {
+                ...formattedOrder,
+                createdAt: shouldResetTime ? 0 : previousOrder.createdAt,
+                waitTime: shouldResetTime ? 0 : previousOrder.waitTime,
+              };
 
-    return newOrders;
-  } else {
-    // 新訂單才用 now 作為 createdAt
-    return [...prevOrders, { ...formattedOrder, createdAt: now }];
-  }
-});
-
+              return newOrders;
+            } else {
+              // 新訂單才用 now 作為 createdAt
+              return [...prevOrders, { ...formattedOrder, createdAt: now }];
+            }
+          });
         }
       } catch (e) {
         console.error("解析 WebSocket 訊息錯誤:", e);
@@ -222,11 +222,17 @@ export default function Dashboard() {
     <>
       <style>{`
           /* 手機響應式排版 */
-          .scroll-wrapper {
-  max-height: 100vh; /* 或你可以根據需求設為 80vh, 600px 等 */
-  overflow-y: auto;
-  padding-right: 6px; /* 保留捲軸空間 */
+                      .scroll-wrapper {
+              max-height: 100vh; /* 或你可以根據需求設為 80vh, 600px 等 */
+              overflow-y: auto;
+              padding-right: 6px; /* 保留捲軸空間 */
+            }
+                     * {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
+
           .grid-container {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -238,7 +244,7 @@ export default function Dashboard() {
           @media (max-width: 768px) {
             .grid-container {
               grid-template-columns: 1fr;
-              grid-template-rows: auto;
+              // grid-template-rows: auto;
             }
           }
 
@@ -413,9 +419,9 @@ export default function Dashboard() {
               沒有可顯示的訂單
             </div>
           ) : (
-              pagedOrders.map((order) => {
-                // ❗ 新增這行：若沒有 items 就跳過渲染
-                if (!order.items || order.items.length === 0) return null;
+            pagedOrders.map((order) => {
+              // ❗ 新增這行：若沒有 items 就跳過渲染
+              if (!order.items || order.items.length === 0) return null;
               const isFadingOut = fadingOutIds.has(order.id);
               const isLongWait = order.waitTime > LONG_WAIT_THRESHOLD;
               const classNames = ["card"];
@@ -455,7 +461,10 @@ export default function Dashboard() {
                     >
                       號碼牌：{order.ticketNumber}
                     </div>
-                    <div style={{ color: "#666" }}>{order.waitTime} 分鐘</div>
+
+                    {/* <div style={{ color: "#666" }}>{order.waitTime} 分鐘</div> */}
+
+
                     <div style={{ fontWeight: "bold", fontSize: 16 }}>
                       品數：
                       {order.items.reduce(
@@ -478,9 +487,9 @@ export default function Dashboard() {
                           key={`${item.name}-${i}`}
                           style={{ fontSize: 14, marginBottom: 4 }}
                         >
-                          {item.name} x{item.quantity}（ {sugar} / {ice} /{" "}
-                          {eco_cup}
-                          {optionsText ? ` / ${optionsText}` : ""}）
+                          {item.name} x{item.quantity}（ {sugar} / {ice}
+                          {optionsText ? ` / ${optionsText}` : ""} /{" "}
+                          {eco_cup} ）
                         </div>
                       );
                     })}
